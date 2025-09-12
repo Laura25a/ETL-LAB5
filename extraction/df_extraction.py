@@ -1,6 +1,7 @@
 import pandas as pd
 import glob
 import re
+import requests
 from datetime import datetime
 
 class extDf:
@@ -99,7 +100,7 @@ class dimValidation:
                 'type_error': 'UknownError',
                 'msg': f'An error has happened. Erorr info: {e}',
                 'data': None
-                 }
+                }
         
     def fatalitiesValidation(self):
         try:
@@ -125,13 +126,48 @@ class dimValidation:
                 }
     
     def uniquenessValidation(self):
-        repitedIndex = len(self.df['index'].unique())
-        duplicatedRows = self.df.duplicated().sum()
+        try:
+            repitedIndex = len(self.df['index'].unique())
+            duplicatedRows = self.df.duplicated().sum()
+            
+            return {
+                    'ok': True,
+                    'type_error': None,
+                    'msg': 'The validation of the uniqueness were succesfully',
+                    'data': f'Total repited rows: {duplicatedRows}. Total unique indexes: {repitedIndex}.'
+                    }
         
-        return {
-                'ok': True,
-                'type_error': None,
-                'msg': 'The validation of the uniqueness were succesfully',
-                'data': f'Total repited rows: {duplicatedRows}. Total unique indexes: {repitedIndex}.'
+        except Exception as e:
+            return {
+                'ok': False,
+                'type_error': 'UknownError',
+                'msg': f'An error has happened. Erorr info: {e}',
+                'data': None
                 }
         
+    def validityCountry(self):
+        try:
+            countrysGet = requests.get(
+                'https://restcountries.com/v3.1/all?fields=name'
+                ).json()
+        
+
+            commas = list(
+            map(lambda x: (x, [i for i, letter in enumerate(x) if letter == ',']),
+            self.df['Location'].dropna().unique())
+            )
+        
+            doubleCommas = [[loc, index] for loc, index in commas if len(index) > 1]
+            return {
+                    'ok': True,
+                    'type_error': None,
+                    'msg': 'The validation of the uniqueness were succesfully',
+                    'data': countrysGet
+                    }
+        except Exception as e:
+            return {
+                'ok': False,
+                'type_error': 'UknownError',
+                'msg': f'An error has happened. Erorr info: {e}',
+                'data': None
+                }
