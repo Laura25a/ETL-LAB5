@@ -21,7 +21,7 @@ class extDf:
                     'data': None
                 }
             
-            df = pd.read_csv(dfFolder[0], sep = self.sep)
+            df = pd.read_csv(dfFolder[0], sep=self.sep)
             return {
                 'ok': True,
                 'type_error': None,
@@ -31,11 +31,11 @@ class extDf:
 
         except Exception as e: 
             return {
-                    'ok': False,
-                    'type_error': 'UknownError',
-                    'msg': f'An error has happened. Erorr info: {e}',
-                    'data': None
-                }
+                'ok': False,
+                'type_error': 'UknownError',
+                'msg': f'An error has happened. Erorr info: {e}',
+                'data': None
+            }
         
     def getCols(self):
         try:
@@ -55,7 +55,7 @@ class extDf:
                 'Aboard', 
                 'Fatalities', 
                 'Ground'
-                ]]
+            ]]
             
             cols = ['Aboard', 'Fatalities', 'Ground']
             df[cols] = df[cols].apply(lambda x: pd.to_numeric(x, errors='coerce').astype('Int64'))
@@ -69,53 +69,44 @@ class extDf:
         
         except Exception as e:
             return {
-                    'ok': False,
-                    'type_error': 'UknownError',
-                    'msg': f'An error has happened. Erorr info: {e}',
-                    'data': None
-                } 
+                'ok': False,
+                'type_error': 'UknownError',
+                'msg': f'An error has happened. Erorr info: {e}',
+                'data': None
+            } 
     
+
 class dimValidation:
     def __init__(self, df):
         self.df = df
 
-    def dateFormat(self):
+    def dateValidation(self):
         try:
-            pattern = r'^(0?[1-9]|1[0-2])/(0?[1-9]|[12][0-9]|3[01])/(\d{2}|\d{4})$'
-            rowsMal = []
-            for idx, i in enumerate(self.df['Date']):
-                if re.search(pattern, str(i).strip()) is None:
-                    rowsMal.append(idx)
-
-            return {
-                'ok': True,
-                'type_error': None,
-                'msg': 'The validation of the date format was succesfully',
-                'data': f'There where in total {len(rowsMal)} malformed dates. The rows where {rowsMal}'
-                }
+            self.df['Date'] = pd.to_datetime(self.df['Date'], format='%m/%d/%Y', errors='coerce')
+            self.df = self.df.loc[self.df['Date'] >= '2000-01-01'].copy()
+            return self.df
         
         except Exception as e:
             return {
                 'ok': False,
                 'type_error': 'UknownError',
                 'msg': f'An error has happened. Erorr info: {e}',
-                'data': None
-                }
+                'data': self.df
+            }
         
     def fatalitiesValidation(self):
         try:
-            
             ilogicalValues = self.df.loc[
                 (self.df['Fatalities'] > self.df['Aboard']) |
                 (self.df['Ground'] > self.df['Fatalities']), ['index']
-                ]
+            ]
             
             return {
                 'ok': True,
                 'type_error': None,
                 'msg': 'The validation of the date format was succesfully',
                 'data': f'Total inconsistencies found: {len(ilogicalValues)}. Problematic rows (indices): {list(ilogicalValues.index)}. Check Fatalities vs Aboard and Ground values.'
-                }
+            }
         
         except Exception as e: 
             return {
@@ -123,7 +114,7 @@ class dimValidation:
                 'type_error': 'UknownError',
                 'msg': f'An error has happened. Erorr info: {e}',
                 'data': None
-                }
+            }
     
     def uniquenessValidation(self):
         try:
@@ -131,11 +122,11 @@ class dimValidation:
             duplicatedRows = self.df.duplicated().sum()
             
             return {
-                    'ok': True,
-                    'type_error': None,
-                    'msg': 'The validation of the uniqueness were succesfully',
-                    'data': f'Total repited rows: {duplicatedRows}. Total unique indexes: {repitedIndex}.'
-                    }
+                'ok': True,
+                'type_error': None,
+                'msg': 'The validation of the uniqueness were succesfully',
+                'data': f'Total repited rows: {duplicatedRows}. Total unique indexes: {repitedIndex}.'
+            }
         
         except Exception as e:
             return {
@@ -143,31 +134,53 @@ class dimValidation:
                 'type_error': 'UknownError',
                 'msg': f'An error has happened. Erorr info: {e}',
                 'data': None
-                }
+            }
         
     def validityCountry(self):
         try:
             countrysGet = requests.get(
                 'https://restcountries.com/v3.1/all?fields=name'
-                ).json()
-        
+            ).json()
+            
+            countrys = {
+                'commom name': [],
+                'official name': []
+            }
 
-            commas = list(
-            map(lambda x: (x, [i for i, letter in enumerate(x) if letter == ',']),
-            self.df['Location'].dropna().unique())
-            )
-        
-            doubleCommas = [[loc, index] for loc, index in commas if len(index) > 1]
+            for countryName in countrysGet:
+                countrys['commom name'].append(countryName['name']['common'])
+                countrys['official name'].append(countryName['name']['official'])
+
+            allLocations = self.df['Location'].dropna().unique()
+            invalidCountrys = []
+
+            for loc in allLocations:
+                names = [n.strip() for n in re.split(r'[,\;/\-]', loc)]
+                for name in names:
+                    if name not in countrys['commom name'] and name not in countrys['official name']:
+                        invalidCountrys.append(name)
+
+            def clean_location(location):
+                if not isinstance(location, str):
+                    return location
+                
+                parts = [p.strip() for p in location.replace(';', ',').replace('/', ',').replace('-', ',').split(',')]
+                parts = [p for p in parts if p not in invalidCountrys]
+                return ', '.join(parts)
+
+            self.df['Location'] = self.df['Location'].apply(clean_location)
+
             return {
-                    'ok': True,
-                    'type_error': None,
-                    'msg': 'The validation of the uniqueness were succesfully',
-                    'data': countrysGet
-                    }
+                'ok': True,
+                'type_error': None,
+                'msg': 'The validation of the uniqueness were succesfully',
+                'data': self.df
+            }
+        
         except Exception as e:
             return {
                 'ok': False,
                 'type_error': 'UknownError',
                 'msg': f'An error has happened. Erorr info: {e}',
                 'data': None
-                }
+            }
